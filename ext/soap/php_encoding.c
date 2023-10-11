@@ -274,6 +274,20 @@ static encodePtr find_encoder_by_type_name(sdlPtr sdl, const char *type)
 		    if (strcmp(enc->details.type_str, type) == 0) {
 				return enc;
 			}
+            int ns_len = strlen(enc->details.ns);
+            int type_len = strlen(enc->details.type_str);
+            int len = ns_len + type_len + 2;
+            char *nscat = emalloc(len+1);
+            nscat[0] = '{';
+            memcpy(nscat+1,enc->details.ns,ns_len);
+            nscat[ns_len+1] = '}';
+            memcpy(nscat+ns_len+2, enc->details.type_str, type_len);
+            nscat[len] = '\0';
+            if (strcmp(nscat, type) == 0) {
+                efree(nscat);
+                return enc;
+            }
+            efree(nscat);
 		} ZEND_HASH_FOREACH_END();
 	}
 	return NULL;
@@ -1380,8 +1394,24 @@ static zval *to_zval_object_ex(zval *ret, encodeTypePtr type, xmlNodePtr data, z
 	} else if (SOAP_GLOBAL(class_map) && type->type_str) {
 		zval              *classname;
 		zend_class_entry  *tmp;
+        classname = zend_hash_str_find_deref(SOAP_GLOBAL(class_map), type->type_str, strlen(type->type_str));
+        if(classname == NULL){
+            if (type->ns) {
+                int ns_len = strlen(type->ns);
+                int type_len = strlen(type->type_str);
+                int len = ns_len + type_len + 2;
+                char *nscat = emalloc(len+1);
+                nscat[0] = '{';
+                memcpy(nscat+1,type->ns,ns_len);
+                nscat[ns_len+1] = '}';
+                memcpy(nscat+ns_len+2, type->type_str, type_len);
+                nscat[len] = '\0';
+                classname = zend_hash_str_find_deref(SOAP_GLOBAL(class_map), nscat, strlen(nscat));
 
-		if ((classname = zend_hash_str_find_deref(SOAP_GLOBAL(class_map), type->type_str, strlen(type->type_str))) != NULL &&
+                efree(nscat);
+            }
+        }
+		if (classname != NULL &&
 		    Z_TYPE_P(classname) == IS_STRING &&
 		    (tmp = zend_fetch_class(Z_STR_P(classname), ZEND_FETCH_CLASS_AUTO)) != NULL) {
 			ce = tmp;
